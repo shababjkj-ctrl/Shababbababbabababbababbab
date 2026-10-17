@@ -60,7 +60,7 @@ LEVEL_THRESHOLD = 3          # level >= 3 -> Lone Wolf, below -> Battle Royale
 BR_START_MATCH_INTERVAL = 4.0
 BR_NEW_MATCH_DELAY = 5.0
 BR_MATCH_IDLE_TIMEOUT = 15.0
-_LOGIN_SEMAPHORE = asyncio.Semaphore(15)   # original BR limited parallel logins to 4
+_LOGIN_SEMAPHORE = asyncio.Semaphore(4)   # original BR limited parallel logins to 4
 
 
 def get_current_mode(uid):
