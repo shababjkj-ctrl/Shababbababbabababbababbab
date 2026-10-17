@@ -54,7 +54,7 @@ MAX_MATCH_DURATION = 800
 MATCH_IDLE_TIMEOUT = 20.0
 MAX_CONCURRENT_MATCHES = 2  # legacy fallback
 MAX_CONCURRENT_MATCHES_BR = 1
-MAX_CONCURRENT_MATCHES_LW = 2
+MAX_CONCURRENT_MATCHES_LW = 15
 LEVEL_THRESHOLD = 3          # level >= 3 -> Lone Wolf, below -> Battle Royale
 # Original Battle Royale bot timings (restored for BR accounts)
 BR_START_MATCH_INTERVAL = 4.0
