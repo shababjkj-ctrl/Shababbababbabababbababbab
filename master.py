@@ -35,7 +35,7 @@ import MasterTeam_pb2
 import MasterFF_pb2
 
 # ==================== WEB DASHBOARD ====================
-from dashboard_server import bot_state, start_web_dashboard, fill_slots, enforce_startup_cap, MAX_ACTIVE_ACCOUNTS, AUTO_DELETE_LEVEL
+from dashboard_server import bot_state, start_web_dashboard, fill_slots, park_failed_account, enforce_startup_cap, MAX_ACTIVE_ACCOUNTS, AUTO_DELETE_LEVEL
 
 # ==================== CONFIGURATION ====================
 WEB_HOST = "0.0.0.0"
@@ -60,6 +60,7 @@ LEVEL_THRESHOLD = 3          # level >= 3 -> Lone Wolf, below -> Battle Royale
 BR_START_MATCH_INTERVAL = 4.0
 BR_NEW_MATCH_DELAY = 5.0
 BR_MATCH_IDLE_TIMEOUT = 15.0
+LOGIN_FAILS_BEFORE_SWAP = 6              # consecutive login failures before the account is swapped for a stored one
 _LOGIN_SEMAPHORE = asyncio.Semaphore(4)   # original BR limited parallel logins to 4
 
 
@@ -2662,6 +2663,7 @@ async def run_account_worker(account_data: Dict, label: str):
 
 
 async def account_loop_guest(uid: str, password: str):
+    fails = 0
     while True:
         try:
             log_login(f"Starting login for Guest UID: {uid}")
@@ -2672,13 +2674,20 @@ async def account_loop_guest(uid: str, password: str):
             async with _LOGIN_SEMAPHORE:
                 account_data = await process_account_uid_pass(uid, password)
             if not account_data:
-                log_err(f"Login failed for UID: {uid}. Retry in 15s...")
+                fails += 1
+                log_err(f"Login failed for UID: {uid} ({fails}/{LOGIN_FAILS_BEFORE_SWAP}). Retry in 15s...")
                 try:
                     bot_state.update_status(str(uid), "ERROR")
                 except Exception:
                     pass
+                if fails >= LOGIN_FAILS_BEFORE_SWAP:
+                    if await park_failed_account(uid=str(uid)):
+                        bot_state.account_workers.pop(str(uid), None)
+                        return
+                    fails = 0
                 await asyncio.sleep(15)
                 continue
+            fails = 0
 
             await run_account_worker(account_data, uid)
             log_warn(f"Session finished for {uid}. Reconnect in 3s...")
@@ -2697,15 +2706,23 @@ async def account_loop_guest(uid: str, password: str):
 
 async def account_loop_token(token: str):
     token_label = token[:10]
+    fails = 0
     while True:
         try:
             log_login("Starting login with Access Token...")
             async with _LOGIN_SEMAPHORE:
                 account_data = await process_account_token(token)
             if not account_data:
-                log_err("Login failed for Token. Retry in 15s...")
+                fails += 1
+                log_err(f"Login failed for Token ({fails}/{LOGIN_FAILS_BEFORE_SWAP}). Retry in 15s...")
+                if fails >= LOGIN_FAILS_BEFORE_SWAP:
+                    if await park_failed_account(token=token):
+                        bot_state.account_workers.pop(token_label, None)
+                        return
+                    fails = 0
                 await asyncio.sleep(15)
                 continue
+            fails = 0
 
             acc_id = str(account_data['account_id'])
             await run_account_worker(account_data, acc_id)

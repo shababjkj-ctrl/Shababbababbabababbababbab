@@ -496,6 +496,27 @@ async def fill_slots() -> int:
     return started
 
 
+async def park_failed_account(uid: str = "", token: str = "") -> bool:
+    """An account that cannot log in is moved to the END of the queue (not deleted) so the next
+    stored account takes its slot. Returns True if it was swapped out."""
+    async with _slot_lock:
+        q = _read_list(QUEUE_PATH)
+        if not q:
+            return False                      # nothing waiting -> keep retrying this account
+        key = ("u:" + str(uid)) if uid else ("t:" + str(token)[:24])
+        active = _read_list(ACCOUNTS_PATH)
+        entry = next((a for a in active if _entry_key(a) == key), None)
+        if entry is None:
+            return False
+        _write_list(ACCOUNTS_PATH, [a for a in active if _entry_key(a) != key])
+        q.append(entry)
+        _write_list(QUEUE_PATH, q)
+    bot_state.log(f"Login keeps failing for {uid or ('Token_' + str(token)[:8])} -> moved to end of storage, "
+                  f"next account takes the slot", "warning")
+    await fill_slots()
+    return True
+
+
 def enforce_startup_cap():
     """If accounts.json holds more than MAX_ACTIVE_ACCOUNTS, push the extras to the front of the queue."""
     active = _read_list(ACCOUNTS_PATH)
